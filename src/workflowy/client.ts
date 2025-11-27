@@ -27,26 +27,49 @@ class WorkflowyClient {
     }
 
     /**
-     * Get the root nodes of the Workflowy document
+     * Limit the depth of a node tree
      */
-    async getRootItems(username?: string, password?: string) {
+    private limitDepth(node: any, currentDepth: number, maxDepth: number): any {
+        if (maxDepth !== -1 && currentDepth >= maxDepth) {
+            const { items, ...nodeWithoutItems } = node;
+            return {
+                ...nodeWithoutItems,
+                hasChildren: items && items.length > 0,
+                items: undefined
+            };
+        }
+        return {
+            ...node,
+            items: node.items?.map((item: any) => this.limitDepth(item, currentDepth + 1, maxDepth))
+        };
+    }
+
+    /**
+     * Get the root nodes of the Workflowy document
+     * @param depth - How many levels deep to return. 0 = top level only, -1 = unlimited (use carefully!)
+     */
+    async getRootItems(username?: string, password?: string, depth: number = 0) {
         const { wf, client } = await this.createAuthenticatedClient(username, password);
         const doc = await wf.getDocument();
         client.getTreeData()
-        return doc.root.toJson();
+        const root = doc.root.toJson();
+        return this.limitDepth(root, -1, depth);
     }
 
     /**
      * Get the child nodes of a specific node
+     * @param depth - How many levels deep to return. 0 = immediate children only, -1 = unlimited (use carefully!)
      */
-    async getChildItems(parentId: string, username?: string, password?: string) {
+    async getChildItems(parentId: string, username?: string, password?: string, depth: number = 0) {
         const {wf, client } = await this.createAuthenticatedClient(username, password);
         let doc = await wf.getDocument();
-        const parent = doc.root.items.find(item => item.id === parentId);
+        const parent = this.findNodeById(doc.root, parentId);
         if (!parent) {
             throw new Error(`Parent node with ID ${parentId} not found.`);
         }
-        return parent.items.map(item => item.toJson());
+        const parentJson = parent.toJson();
+        const limited = this.limitDepth(parentJson, -1, depth);
+        return limited.items || [];
     }
 
     /**
@@ -75,12 +98,18 @@ class WorkflowyClient {
     /**
      * Create a new node at a specific location
      */
-    async createNode(parentId: string, name: string, description?: string, username?: string, password?: string) {
+    async createNode(parentId: string | undefined, name: string, description?: string, username?: string, password?: string) {
         const { wf } = await this.createAuthenticatedClient(username, password);
         const doc = await wf.getDocument();
-        const parent = doc.root.items.find(item => item.id === parentId);
-        if (!parent) {
-            throw new Error(`Parent node with ID ${parentId} not found.`);
+
+        let parent;
+        if (parentId) {
+            parent = this.findNodeById(doc.root, parentId);
+            if (!parent) {
+                throw new Error(`Parent node with ID ${parentId} not found.`);
+            }
+        } else {
+            parent = doc.root;
         }
 
         const newNode = await parent.createItem();
@@ -88,10 +117,25 @@ class WorkflowyClient {
         if (description) {
             newNode.setNote(description);
         }
-        if (doc.isDirty()) {
-            // Saves the changes if there are any
-            await doc.save();
+        // Always save - isDirty() may not detect all changes
+        await doc.save();
+        return newNode.id;
+    }
+
+    /**
+     * Recursively find a node by ID
+     */
+    private findNodeById(node: any, id: string): any {
+        if (node.id === id) {
+            return node;
         }
+        if (node.items) {
+            for (const child of node.items) {
+                const found = this.findNodeById(child, id);
+                if (found) return found;
+            }
+        }
+        return null;
     }
 
     /**
@@ -100,7 +144,7 @@ class WorkflowyClient {
     async updateNode(nodeId: string, name?: string, description?: string, username?: string, password?: string) {
         const { wf } = await this.createAuthenticatedClient(username, password);
         const doc = await wf.getDocument();
-        const node = doc.root.items.find(item => item.id === nodeId);
+        const node = this.findNodeById(doc.root, nodeId);
         if (!node) {
             throw new Error(`Node with ID ${nodeId} not found.`);
         }
@@ -123,7 +167,7 @@ class WorkflowyClient {
     async deleteNode(nodeId: string, username?: string, password?: string) {
         const { wf } = await this.createAuthenticatedClient(username, password);
         const doc = await wf.getDocument();
-        const node = doc.root.items.find(item => item.id === nodeId);
+        const node = this.findNodeById(doc.root, nodeId);
         if (!node) {
             throw new Error(`Node with ID ${nodeId} not found.`);
         }
@@ -141,7 +185,7 @@ class WorkflowyClient {
     async toggleComplete(nodeId: string, completed: boolean, username?: string, password?: string) {
         const { wf } = await this.createAuthenticatedClient(username, password);
         const doc = await wf.getDocument();
-        const node = doc.root.items.find(item => item.id === nodeId);
+        const node = this.findNodeById(doc.root, nodeId);
         if (!node) {
             throw new Error(`Node with ID ${nodeId} not found.`);
         }

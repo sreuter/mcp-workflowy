@@ -47,10 +47,13 @@
     "dotenv": "^16.5.0",
     "effect": "^3.14.18",
     "fastmcp": "^1.23.2",
-    "workflowy": "^2.8.1"
+    "workflowy": "^2.8.2"
   },
   "overrides": {
     "cross-spawn": ">=7.0.5",
     "brace-expansion": ">=2.0.0"
+  },
+  "patchedDependencies": {
+    "workflowy@2.8.2": "patches/workflowy@2.8.2.patch"
   }
 }

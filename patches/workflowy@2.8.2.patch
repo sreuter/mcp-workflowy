@@ -1,0 +1,13 @@
+diff --git a/esm/src/document.js b/esm/src/document.js
+index 4d9346c41dad9338fb20175f8b4c1ef94aaf57b3..b13f1555ea1a1ec9e85d6a3c13fa7db3032d2c2b 100644
+--- a/esm/src/document.js
++++ b/esm/src/document.js
+@@ -318,7 +318,7 @@ export class List {
+         });
+         this.#companion.shortIdMap.set(newId.split("-").pop(), newId);
+         this.itemIds.splice(priority, 0, newId);
+-        const parentid = this.id === "home" ? ROOT : this.id;
++        const parentid = this.id === ROOT ? "None" : this.id;
+         this.#companion.addOperation(this.data.treeId, {
+             type: "create",
+             data: {
